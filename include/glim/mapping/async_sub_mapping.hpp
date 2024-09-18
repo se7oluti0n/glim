@@ -64,6 +64,8 @@ public:
    */
   std::vector<SubMap::Ptr> get_results();
 
+  SubMap::Ptr force_create_submap();
+
 private:
   void run();
 

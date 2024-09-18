@@ -72,6 +72,8 @@ public:
 
   std::vector<Eigen::Vector4d> export_points();
 
+  void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose);
+
 private:
   void run();
 

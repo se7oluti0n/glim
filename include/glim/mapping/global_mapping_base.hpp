@@ -70,6 +70,8 @@ public:
    */
   static std::shared_ptr<GlobalMappingBase> load_module(const std::string& so_name);
 
+  virtual void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) {}
+
 protected:
   std::shared_ptr<spdlog::logger> logger;
 };

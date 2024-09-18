@@ -75,6 +75,7 @@ public:
    */
   bool load(const std::string& path);
 
+  // virtual void relocalize(double timestamp, const Eigen::Isometry3d & initial_pose) override {}
 protected:
   void insert_submap(int current, const SubMap::Ptr& submap);
 

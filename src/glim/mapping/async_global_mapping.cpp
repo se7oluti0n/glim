@@ -56,6 +56,11 @@ int AsyncGlobalMapping::workload() const {
   return input_submap_queue.size();
 }
 
+void AsyncGlobalMapping::relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) {
+  global_mapping->relocalize(submap, initial_pose);
+}
+
+
 void AsyncGlobalMapping::save(const std::string& path) {
   logger->info("saving to {}...", path);
   std::lock_guard<std::mutex> lock(global_mapping_mutex);

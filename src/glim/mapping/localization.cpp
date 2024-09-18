@@ -55,7 +55,9 @@ Localization::Localization(const LocalizationParams& params) : GlobalMapping(par
 
 Localization::~Localization() {}
 
-void Localization::create_relocalization_factors(
+  // boost::shared_ptr<gtsam::NonlinearFactorGraph> create_relocalization_factors(const SubMap::Ptr& submap, const Eigen::Isometry3d& initial_pose,
+
+boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalization_factors(
   const SubMap::Ptr& submap, const Eigen::Isometry3d& initial_pose,
   double linear_search_window, double angular_search_window) {
 
@@ -66,6 +68,10 @@ void Localization::create_relocalization_factors(
 
 
   // ICP align with the best candidate
+  auto factors = gtsam::make_shared<gtsam::NonlinearFactorGraph>();
+
+
+  relocalization = false;
 
   double min_distance = params.max_implicit_loop_distance;
   glim::SubMap::Ptr prebuilt_map{nullptr};
@@ -82,7 +88,7 @@ void Localization::create_relocalization_factors(
   }
 
   if (!prebuilt_map)
-    return;
+    return factors;
 
 
   // example code of align, assume using one submap
@@ -92,9 +98,8 @@ void Localization::create_relocalization_factors(
     angular_search_window, initial_pose, best_overlap_score);
 
   if (best_overlap_score < params.min_implicit_loop_overlap)
-    return;
+    return factors;
 
-  auto factors = gtsam::make_shared<gtsam::NonlinearFactorGraph>();
   // const int last = current - 1;
   const gtsam::Pose3 init_delta = gtsam::Pose3(best_initial_pose.matrix());
 
@@ -133,27 +138,27 @@ void Localization::create_relocalization_factors(
   const auto H = linearized->hessianBlockDiagonal()[X(1)] + 1e6 * gtsam::Matrix6::Identity();
 
   factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(prebuilt_map->id), X(submap->id), estimated_delta, gtsam::noiseModel::Gaussian::Information(H)));
-  // return factors;
+  return factors;
   // add between factor
 
   // save to T_map_odom
 
   // add relocalization factor
-  new_factors->add(*factors);
+  // new_factors->add(*factors);
 
-  Callbacks::on_smoother_update(*isam2, *new_factors, *new_values);
-  try {
-    auto result = update_isam2(*new_factors, *new_values);
-    Callbacks::on_smoother_update_result(*isam2, result);
-  } catch (std::exception& e) {
-    logger->error("an exception was caught during global map optimization!!");
-    logger->error(e.what());
-  }
-  new_values.reset(new gtsam::Values);
-  new_factors.reset(new gtsam::NonlinearFactorGraph);
+  // Callbacks::on_smoother_update(*isam2, *new_factors, *new_values);
+  // try {
+  //   auto result = update_isam2(*new_factors, *new_values);
+  //   Callbacks::on_smoother_update_result(*isam2, result);
+  // } catch (std::exception& e) {
+  //   logger->error("an exception was caught during global map optimization!!");
+  //   logger->error(e.what());
+  // }
+  // new_values.reset(new gtsam::Values);
+  // new_factors.reset(new gtsam::NonlinearFactorGraph);
 
-  update_submaps();
-  Callbacks::on_update_submaps(submaps);
+  // update_submaps();
+  // Callbacks::on_update_submaps(submaps);
 }
 
 Eigen::Isometry3d Localization::find_best_candidate(
@@ -206,6 +211,14 @@ Eigen::Isometry3d Localization::find_best_candidate(
 void Localization::insert_submap(const SubMap::Ptr& submap) {
   logger->debug("insert_submap id={} |frame|={}", submap->id, submap->frame->size());
 
+  if (relocalize_submap->id == submap->id && relocalization) {
+    auto relocalization_factors = create_relocalization_factors(relocalize_submap, initial_pose_, 6, 2 * M_PI);
+    if (relocalization_factors->size() > 0) {
+      new_factors->add(*relocalization_factors);
+      relocalized = true;
+    }
+  }
+
   const int current = submaps.size();
   const int last = current - 1;
   GlobalMapping::insert_submap(current, submap);
@@ -248,8 +261,8 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
     // new_factors->add(*create_map_matching_cost_factors(current));
 
     // create localization factor
-    new_factors->add(*create_map_matching_cost_factors(current));
-
+    if (relocalized)
+      new_factors->add(*create_map_matching_cost_factors(current));
   }
 
   if (params.enable_imu) {
@@ -389,15 +402,6 @@ bool Localization::load_pose_graph(const std::string& path) {
     //   gtsam::noiseModel::Isotropic::Precision(6, 1e1));
     graph.emplace_shared<gtsam::NonlinearEquality1<gtsam::Pose3>>(gtsam::Pose3(submap->T_world_origin.matrix()), M(submap->id));
   }
-
-  logger->info("optimize");
-  // Callbacks::on_smoother_update(*isam2, graph, values);
-  // auto result = update_isam2(graph, values);
-  // Callbacks::on_smoother_update_result(*isam2, result);
-
-  // update_submaps();
-  // Callbacks::on_update_submaps(submaps);
-
   logger->info("done");
 
   return true;
