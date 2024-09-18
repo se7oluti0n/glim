@@ -139,4 +139,13 @@ struct GlobalMappingCallbacks {
    */
   static CallbackSlot<void(double)> request_to_find_overlapping_submaps;
 };
+
+/**
+ * @brief Global mapping-related callbacks
+ *
+ */
+struct LocalizationCallbacks: public GlobalMappingCallbacks {
+  static CallbackSlot<void()> on_relocalization_success;
+  static CallbackSlot<void()> on_relocalization_failed;
+};
 }

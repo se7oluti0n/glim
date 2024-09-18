@@ -7,14 +7,14 @@
 #include <glim/mapping/global_mapping_base.hpp>
 
 namespace gtsam {
-class Values;
-class NonlinearFactorGraph;
+  class Values;
+  class NonlinearFactorGraph;
 }  // namespace gtsam
 
 namespace gtsam_points {
-class ISAM2Ext;
-class StreamTempBufferRoundRobin;
-struct ISAM2ResultExt;
+  class ISAM2Ext;
+  class StreamTempBufferRoundRobin;
+  struct ISAM2ResultExt;
 }  // namespace gtsam_points
 
 namespace glim {
@@ -75,7 +75,7 @@ public:
    */
   bool load(const std::string& path);
 
-private:
+protected:
   void insert_submap(int current, const SubMap::Ptr& submap);
 
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_between_factors(int current) const;
@@ -84,7 +84,7 @@ private:
   void update_submaps();
   gtsam_points::ISAM2ResultExt update_isam2(const gtsam::NonlinearFactorGraph& new_factors, const gtsam::Values& new_values);
 
-private:
+protected:
   using Params = GlobalMappingParams;
   Params params;
 
