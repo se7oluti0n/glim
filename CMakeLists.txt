@@ -80,6 +80,7 @@ add_library(glim SHARED
   src/glim/mapping/sub_mapping.cpp
   src/glim/mapping/sub_mapping_passthrough.cpp
   src/glim/mapping/global_mapping.cpp
+  src/glim/mapping/localization.cpp
   src/glim/mapping/global_mapping_pose_graph.cpp
   # GPU-related
   ${GPU_SRCS}
@@ -110,6 +111,7 @@ list(APPEND module_srcs
   src/glim/mapping/sub_mapping_create.cpp
   src/glim/mapping/sub_mapping_passthrough_create.cpp
   src/glim/mapping/global_mapping_create.cpp
+  src/glim/mapping/localization_create.cpp
   src/glim/mapping/global_mapping_pose_graph_create.cpp
 )
 if(BUILD_WITH_CUDA)
