@@ -67,6 +67,8 @@ private:
   bool show_submaps;
   bool show_factors;
 
+  bool show_localization_submaps;
+
   bool show_odometry_status;
   int last_id;
   int last_num_points;

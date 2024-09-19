@@ -24,4 +24,9 @@ CallbackSlot<void(gtsam_points::ISAM2Ext&, const gtsam_points::ISAM2ResultExt& r
 
 CallbackSlot<void()> GlobalMappingCallbacks::request_to_optimize;
 CallbackSlot<void(double)> GlobalMappingCallbacks::request_to_find_overlapping_submaps;
+
+CallbackSlot<void(const SubMap::ConstPtr& frame)> LocalizationCallbacks::on_insert_localization_submap;
+CallbackSlot<void(const std::vector<SubMap::Ptr>& submaps)> LocalizationCallbacks::on_update_localization_submaps;
+
+// CallbackSlot<void(const SubMap::ConstPtr& frame)> LocalizationCallbacks::on_update_localization_submaps;
 }  // namespace glim

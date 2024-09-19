@@ -60,6 +60,10 @@ void AsyncGlobalMapping::relocalize(SubMap::Ptr submap, const Eigen::Isometry3d 
   global_mapping->relocalize(submap, initial_pose);
 }
 
+bool AsyncGlobalMapping::load(const std::string& path) {
+  return global_mapping->load(path);
+}
+
 
 void AsyncGlobalMapping::save(const std::string& path) {
   logger->info("saving to {}...", path);

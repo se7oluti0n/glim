@@ -74,6 +74,8 @@ public:
 
   void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose);
 
+  bool load(const std::string& path);
+
 private:
   void run();
 

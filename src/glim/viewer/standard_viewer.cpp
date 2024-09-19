@@ -47,6 +47,7 @@ StandardViewer::StandardViewer() : logger(create_module_logger("viewer")) {
   show_odometry_keyframes = true;
   show_odometry_factors = false;
   show_submaps = true;
+  show_localization_submaps = true;
   show_factors = true;
 
   show_odometry_status = false;
@@ -497,6 +498,31 @@ void StandardViewer::set_callbacks() {
     });
   });
 
+    // Insert submap callback
+  LocalizationCallbacks::on_insert_localization_submap.add([this](const SubMap::ConstPtr& submap) {
+    // submap->T_world_origin can be updated in the global mapping
+    // To safely pass it to the UI thread (pass-by-value of Eigen classes can crash) wrap it in a shared_ptr
+    const std::shared_ptr<Eigen::Isometry3d> T_world_origin(new Eigen::Isometry3d(submap->T_world_origin));
+
+    invoke([this, submap, T_world_origin] {
+      const double stamp_endpoint_R = submap->odom_frames.back()->stamp;
+      const Eigen::Isometry3d T_world_endpoint_R = (*T_world_origin) * submap->T_origin_endpoint_R;
+      trajectory->update_anchor(stamp_endpoint_R, T_world_endpoint_R);
+
+      auto viewer = guik::LightViewer::instance();
+      auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(submap->frame->points, submap->frame->size());
+      auto shader_setting = guik::Rainbow(T_world_origin->matrix().cast<float>());
+      shader_setting.add("point_scale", 0.1f);
+
+      if (enable_partial_rendering) {
+        cloud_buffer->enable_partial_rendering(partial_rendering_budget);
+        shader_setting.add("dynamic_object", 0).make_transparent();
+      }
+
+      viewer->update_drawable("localization_submap_" + std::to_string(submap->id), cloud_buffer, shader_setting);
+    });
+  });
+
   // Update submaps callback
   GlobalMappingCallbacks::on_update_submaps.add([this](const std::vector<SubMap::Ptr>& submaps) {
     const SubMap::ConstPtr latest_submap = submaps.back();
@@ -640,6 +666,10 @@ bool StandardViewer::drawable_filter(const std::string& name) {
     return false;
   }
 
+  if (!show_localization_submaps && starts_with(name, "localization_submap_")) {
+    return false;
+  }
+
   if (!show_factors && starts_with(name, "factors")) {
     return false;
   }
@@ -709,6 +739,8 @@ void StandardViewer::drawable_selection() {
   ImGui::SameLine();
   ImGui::Checkbox("factors", &show_factors);
 
+  ImGui::Separator();
+  ImGui::Checkbox("localization_submaps", &show_localization_submaps);
   ImGui::Separator();
   if (ImGui::DragFloatRange2("z_range", &z_range[0], &z_range[1], 0.1f, -100.0f, 100.0f)) {
     viewer->shader_setting().add<Eigen::Vector2f>("z_range", auto_z_range + z_range);

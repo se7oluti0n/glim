@@ -73,7 +73,7 @@ public:
    * @brief Load a mapping result from a dumped directory
    * @param path Input dump path
    */
-  bool load(const std::string& path);
+  virtual bool load(const std::string& path) override;
 
   // virtual void relocalize(double timestamp, const Eigen::Isometry3d & initial_pose) override {}
 protected:

@@ -332,7 +332,7 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
   Callbacks::on_update_submaps(submaps);
 }
 
-bool Localization::load_pose_graph(const std::string& path) {
+bool Localization::load(const std::string& path) {
   std::ifstream ifs(path + "/graph.txt");
   if (!ifs) {
     logger->error("failed to open {}/graph.txt", path);
@@ -389,7 +389,10 @@ bool Localization::load_pose_graph(const std::string& path) {
       }
     }
 
-    Callbacks::on_insert_submap(submap);
+    Callbacks::on_insert_localization_submap(submap);
+    std::vector<SubMap::Ptr> submaps_{submap};
+    Callbacks::on_update_localization_submaps(submaps_);
+
   }
 
   gtsam::Values values;
@@ -403,6 +406,8 @@ bool Localization::load_pose_graph(const std::string& path) {
     graph.emplace_shared<gtsam::NonlinearEquality1<gtsam::Pose3>>(gtsam::Pose3(submap->T_world_origin.matrix()), M(submap->id));
   }
   logger->info("done");
+
+
 
   return true;
 }

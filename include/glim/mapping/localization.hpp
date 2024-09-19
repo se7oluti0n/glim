@@ -55,7 +55,8 @@ public:
    * @brief Load a mapping result from a dumped directory
    * @param path Input dump path
    */
-  bool load_pose_graph(const std::string& path);
+  // bool load_pose_graph(const std::string& path);
+  virtual bool load(const std::string& path) override;
   bool load_ply(const std::string& path);
 
 private:

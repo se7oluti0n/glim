@@ -72,6 +72,8 @@ public:
 
   virtual void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) {}
 
+  virtual bool load(const std::string& path) {};
+
 protected:
   std::shared_ptr<spdlog::logger> logger;
 };

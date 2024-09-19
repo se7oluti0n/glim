@@ -145,6 +145,23 @@ struct GlobalMappingCallbacks {
  *
  */
 struct LocalizationCallbacks: public GlobalMappingCallbacks {
+
+    /**
+   * @brief SubMap input callback
+   * @param submap  SubMap
+   * @note  submap->T_world_origin is updated in the global mapping thread
+   *        Accessing it from another thread is not thread-safe
+   */
+  static CallbackSlot<void(const SubMap::ConstPtr& submap)> on_insert_localization_submap;
+
+  /**
+   * @brief SubMap states update callback
+   * @param submaps  Updated submaps
+   * @note  submap->T_world_origin are updated in the global mapping thread
+   *        Accessing them from another thread is not thread-safe
+   */
+  static CallbackSlot<void(const std::vector<SubMap::Ptr>& submaps)> on_update_localization_submaps;
+
   static CallbackSlot<void()> on_relocalization_success;
   static CallbackSlot<void()> on_relocalization_failed;
 };
