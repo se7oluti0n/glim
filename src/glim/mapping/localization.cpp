@@ -58,7 +58,7 @@ Localization::~Localization() {}
   // boost::shared_ptr<gtsam::NonlinearFactorGraph> create_relocalization_factors(const SubMap::Ptr& submap, const Eigen::Isometry3d& initial_pose,
 
 boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalization_factors(
-  const SubMap::Ptr& submap, const Eigen::Isometry3d& initial_pose,
+  const SubMap::Ptr& submap, const Eigen::Isometry3d& T_world_endpoint_R,
   double linear_search_window, double angular_search_window) {
 
   // generate rotated pointcloud and matching candidates
@@ -93,6 +93,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
 
   // example code of align, assume using one submap
   // auto & prebuilt_map = prebuilt_submaps.front();
+  const Eigen::Isometry3d initial_pose = T_world_endpoint_R * submap->T_origin_endpoint_R.inverse();
   double best_overlap_score = 0.0;
   auto best_initial_pose = find_best_candidate(prebuilt_map, submap, linear_search_window,
     angular_search_window, initial_pose, best_overlap_score);
@@ -389,9 +390,8 @@ bool Localization::load(const std::string& path) {
       }
     }
 
-    Callbacks::on_insert_localization_submap(submap);
-    std::vector<SubMap::Ptr> submaps_{submap};
-    Callbacks::on_update_localization_submaps(submaps_);
+    // Callbacks::on_insert_localization_submap(submap);
+    // std::vector<SubMap::Ptr> submaps_{submap};
 
   }
 
@@ -407,6 +407,7 @@ bool Localization::load(const std::string& path) {
   }
   logger->info("done");
 
+  Callbacks::on_update_localization_submaps(prebuilt_submaps);
 
 
   return true;

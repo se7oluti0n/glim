@@ -41,6 +41,8 @@ public:
   // virtual void insert_imu(const double stamp, const Eigen::Vector3d& linear_acc, const Eigen::Vector3d& angular_vel) override;
   virtual void insert_submap(const SubMap::Ptr& submap) override;
   virtual void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) override {
+    // initial_pose will correspond to last_frame of submap
+    // so correct intial pose will be : correct_initial_pose = () submap->T_world_origin
     relocalize_submap = submap;
     relocalization = true;
   }
