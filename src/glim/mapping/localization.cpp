@@ -43,6 +43,20 @@ using gtsam::symbol_shorthand::V;
 using gtsam::symbol_shorthand::X;
 using gtsam::symbol_shorthand::M;
 
+Eigen::Isometry3d remove_roll_pitch(const Eigen::Isometry3d & pose) {
+  Eigen::Isometry3d result = pose;
+
+  Eigen::Vector3d euler = pose.rotation().eulerAngles(0, 1, 2);
+
+  Eigen::Matrix3d new_rotation;
+  new_rotation = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX())
+    * Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY())
+    * Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ());
+
+  result.linear() = new_rotation;
+  return result;
+}
+
 using Callbacks = LocalizationCallbacks;
 
 LocalizationParams::LocalizationParams(): GlobalMappingParams() {
@@ -87,7 +101,9 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
 
   double min_distance = params.max_implicit_loop_distance;
   glim::SubMap::Ptr prebuilt_map{nullptr};
-  const Eigen::Isometry3d initial_pose = T_world_endpoint_R * submap->T_origin_endpoint_R.inverse();
+  Eigen::Isometry3d T_origin_endpoint_R = remove_roll_pitch(submap->T_origin_endpoint_R);
+
+  const Eigen::Isometry3d initial_pose = remove_roll_pitch(T_world_endpoint_R) * T_origin_endpoint_R.inverse();
 
   for (int i = 0; i < prebuilt_submaps.size(); i++) {
     const double dist = (prebuilt_submaps[i]->T_world_origin.translation() - initial_pose.translation()).norm();
@@ -100,7 +116,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
     }
   }
 
-  logger->info("min_distance: {:0.4f}, max_implicit_loop_distance: {:0.4f}", 
+  logger->info("min_distance: {:0.4f}, max_implicit_loop_distance: {:0.4f}",
     min_distance, params.max_implicit_loop_distance);
 
 
@@ -118,13 +134,15 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
 
   auto best_initial_pose = find_best_candidate(prebuilt_map, submap, linear_search_window,
     angular_search_window, initial_pose, best_overlap_score);
-  logger->info("best overlap score: {:0.4f}, min score: {:0.4f}", 
+  logger->info("best overlap score: {:0.4f}, min score: {:0.4f}",
     best_overlap_score, params.min_implicit_loop_overlap);
-  if (best_overlap_score < params.min_implicit_loop_overlap)
+
+  if (best_overlap_score < 0.01)
     return factors;
 
   // const int last = current - 1;
-  const gtsam::Pose3 init_delta = gtsam::Pose3(best_initial_pose.matrix());
+  const gtsam::Pose3 init_delta = gtsam::Pose3((prebuilt_map->T_world_origin.inverse() * best_initial_pose).matrix());
+  // gtsam::Pose3((prebuilt_map->T_world_origin.inverse() * best_initial_pose).matrix());
 
 
   gtsam::Values values;
@@ -134,10 +152,17 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   gtsam::NonlinearFactorGraph graph;
   graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(0), gtsam::Pose3::Identity(), gtsam::noiseModel::Isotropic::Precision(6, 1e6));
 
-  auto factor = gtsam::make_shared<gtsam_points::IntegratedGICPFactor>(X(0), X(1), prebuilt_map->frame, submap->frame);
-  factor->set_max_correspondence_distance(0.5);
-  factor->set_num_threads(2);
-  graph.add(factor);
+  // auto factor = gtsam::make_shared<gtsam_points::IntegratedGICPFactor>(X(0), X(1), prebuilt_map->frame, submap->frame);
+  // factor->set_max_correspondence_distance(2);
+  // factor->set_num_threads(2);
+
+  gtsam_points::PointCloud::Ptr subsampled_submap = gtsam_points::random_sampling(submap->frame, params.randomsampling_rate, mt);
+
+  for (const auto& voxelmap : prebuilt_map->voxelmaps) {
+    auto factor = gtsam::make_shared<gtsam_points::IntegratedVGICPFactor>(X(0), X(1), voxelmap, subsampled_submap);
+    graph.add(factor);
+  }
+  // graph.add(factor);
 
   logger->info("--- LM optimization for relocalization ---");
   gtsam_points::LevenbergMarquardtExtParams lm_params;
@@ -149,6 +174,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   auto arena = static_cast<tbb::task_arena*>(tbb_task_arena.get());
   arena->execute([&] {
 #endif
+
     gtsam_points::LevenbergMarquardtOptimizerExt optimizer(graph, values, lm_params);
     values = optimizer.optimize();
 
@@ -157,33 +183,22 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
 #endif
 
   const gtsam::Pose3 estimated_delta = values.at<gtsam::Pose3>(X(1));
-  const auto linearized = factor->linearize(values);
-  const auto H = linearized->hessianBlockDiagonal()[X(1)] + 1e6 * gtsam::Matrix6::Identity();
+  // const auto linearized = factor->linearize(values);
+  // const auto H = linearized->hessianBlockDiagonal()[X(1)] + 1e6 * gtsam::Matrix6::Identity();
+  const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, 1e6);
 
-  logger->info("--- found relocalization factor ---");
 
-  factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(prebuilt_map->id), X(submap->id), estimated_delta, gtsam::noiseModel::Gaussian::Information(H)));
+  Eigen::Isometry3d optimized_pose = prebuilt_map->T_world_origin * Eigen::Isometry3d(estimated_delta.matrix());
+  double overlap_score  = gtsam_points::overlap_auto(
+    prebuilt_map->voxelmaps.back(), submap->frame,
+    Eigen::Isometry3d(estimated_delta.matrix()));
+
+  Callbacks::on_update_submap_initial_pose(submap, best_initial_pose);
+
+  logger->info("--- found relocalization factor, overlap score: {:0.5f}---", overlap_score);
+
+  factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(prebuilt_map->id), X(submap->id), estimated_delta, prior_noise6));
   return factors;
-  // add between factor
-
-  // save to T_map_odom
-
-  // add relocalization factor
-  // new_factors->add(*factors);
-
-  // Callbacks::on_smoother_update(*isam2, *new_factors, *new_values);
-  // try {
-  //   auto result = update_isam2(*new_factors, *new_values);
-  //   Callbacks::on_smoother_update_result(*isam2, result);
-  // } catch (std::exception& e) {
-  //   logger->error("an exception was caught during global map optimization!!");
-  //   logger->error(e.what());
-  // }
-  // new_values.reset(new gtsam::Values);
-  // new_factors.reset(new gtsam::NonlinearFactorGraph);
-
-  // update_submaps();
-  // Callbacks::on_update_submaps(submaps);
 }
 
 Eigen::Isometry3d Localization::find_best_candidate(
@@ -192,7 +207,7 @@ Eigen::Isometry3d Localization::find_best_candidate(
     Eigen::Isometry3d initial_pose, double& best_overlap_score) const
 {
   double linear_step = 0.5;
-  double angular_step = 20 / 180 * M_PI;
+  double angular_step = 20.0 / 180.0 * M_PI;
 
   Eigen::Matrix3d rot_mat = initial_pose.rotation();
   Eigen::Vector3d euler = rot_mat.eulerAngles(0, 1, 2);
@@ -201,30 +216,33 @@ Eigen::Isometry3d Localization::find_best_candidate(
   best_overlap_score  = 0.0;
   Eigen::Isometry3d best_initial_pose;
 
-  
-      for (double delta_theta = -angular_search_window/2.0; delta_theta < angular_search_window / 2.0; delta_theta += angular_step) {
+  for (double delta_x = -linear_search_window / 2.0; delta_x < linear_search_window / 2.0; delta_x += linear_step)
+  for (double delta_y = -linear_search_window / 2.0; delta_y < linear_search_window / 2.0; delta_y += linear_step)
+  for (double delta_theta = -angular_search_window/2.0; delta_theta < angular_search_window / 2.0; delta_theta = delta_theta + angular_step) {
+    Eigen::Matrix3d new_rotation;
+    new_rotation = Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX())
+      * Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY())
+      * Eigen::AngleAxisd(euler[2] + delta_theta, Eigen::Vector3d::UnitZ());
 
-          Eigen::Matrix3d new_rotation;
-          new_rotation = Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX())
-              * Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY())
-              * Eigen::AngleAxisd(euler[2] + delta_theta, Eigen::Vector3d::UnitZ());
+    Eigen::Isometry3d new_pose;
+    new_pose.translation() = Eigen::Vector3d(translation.x() + delta_x, translation.y() + delta_y, translation.z());
+    new_pose.linear() = new_rotation;
 
-          Eigen::Isometry3d new_pose;
-          new_pose.translation() = translation;
-          new_pose.linear() = new_rotation;
+    const Eigen::Isometry3d delta = target_map->T_world_origin.inverse() * submap->T_world_origin;
 
-          double overlap_score  = gtsam_points::overlap_auto(target_map->voxelmaps.back(), submap->frame, new_pose);
-          logger->info("overlap score {0.4f}, delta_theta: {0.4f}",
-            overlap_score, delta_theta);
-          if (overlap_score < params.min_implicit_loop_overlap) {
-            continue;
-          }
+    double overlap_score  = gtsam_points::overlap_auto(target_map->voxelmaps.back(), submap->frame, delta);
+    // logger->info("overlap score {:0.4f}, delta_theta: {:0.4f}",
+      // overlap_score, delta_theta);
+    // std::cout << "overlap score " << overlap_score << ", delta_theta: " << delta_theta << std::endl;
+    if (overlap_score < 0.01) {
+      continue;
+    }
 
-          if (overlap_score > best_overlap_score) {
-            best_overlap_score = overlap_score;
-            best_initial_pose = new_pose;
-          }
-      }
+    if (overlap_score > best_overlap_score) {
+      best_overlap_score = overlap_score;
+      best_initial_pose = new_pose;
+    }
+  }
 
   return best_initial_pose;
 }
@@ -232,7 +250,7 @@ Eigen::Isometry3d Localization::find_best_candidate(
 // may be add matching cost function to map
 
 void Localization::insert_submap(const SubMap::Ptr& submap) {
-  logger->debug("insert_submap id={} |frame|={}", submap->id, submap->frame->size());
+  logger->info("insert_submap id={} |frame|={}", submap->id, submap->frame->size());
 
   const int current = submaps.size();
   const int last = current - 1;
@@ -333,7 +351,7 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
   }
 
   if (relocalize_submap->id == submap->id && relocalization) {
-    auto relocalization_factors = create_relocalization_factors(relocalize_submap, initial_pose_, 6, M_PI / 6.0);
+    auto relocalization_factors = create_relocalization_factors(relocalize_submap, initial_pose_, 4, 2 * M_PI);
     if (relocalization_factors->size() > 0) {
       new_factors->add(*relocalization_factors);
       relocalized = true;
@@ -428,6 +446,12 @@ bool Localization::load(const std::string& path) {
     //   gtsam::noiseModel::Isotropic::Precision(6, 1e1));
     graph.emplace_shared<gtsam::NonlinearEquality1<gtsam::Pose3>>(gtsam::Pose3(submap->T_world_origin.matrix()), M(submap->id));
   }
+
+  logger->info("optimize");
+  // Callbacks::on_smoother_update(*isam2, graph, values);
+  auto result = update_isam2(graph, values);
+  // Callbacks::on_smoother_update_result(*isam2, result);
+
   logger->info("done");
 
   Callbacks::on_update_localization_submaps(prebuilt_submaps);
