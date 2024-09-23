@@ -83,7 +83,7 @@ void AsyncSubMapping::run() {
 SubMap::Ptr AsyncSubMapping::force_create_submap() {
   auto last_submaps = sub_mapping->submit_end_of_sequence();
   output_submap_queue.insert(last_submaps);
-  return last_submaps.back();
+  return last_submaps.size() > 0 ? last_submaps.back(): nullptr;
 }
 
 }  // namespace glim

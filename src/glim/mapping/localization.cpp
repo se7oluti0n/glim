@@ -56,6 +56,17 @@ Localization::Localization(const LocalizationParams& params) : GlobalMapping(par
 Localization::~Localization() {}
 
   // boost::shared_ptr<gtsam::NonlinearFactorGraph> create_relocalization_factors(const SubMap::Ptr& submap, const Eigen::Isometry3d& initial_pose,
+void Localization::relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) {
+  // initial_pose will correspond to last_frame of submap
+  // so correct intial pose will be : correct_initial_pose = () submap->T_world_origin
+  relocalize_submap = submap;
+  initial_pose_ = initial_pose;
+  // logger->info("submap: {d}, num frames: {d}, initial position: {0.4f}, {0.4f}, {0.4f}",
+  //     submap->id, submap->odom_frames.size(),
+  //     initial_pose.translation().x(), initial_pose.translation().y(), initial_pose.translation().z());
+  relocalization = true;
+}
+
 
 boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalization_factors(
   const SubMap::Ptr& submap, const Eigen::Isometry3d& T_world_endpoint_R,
@@ -66,6 +77,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   // for each candidates, compute overlap score
 
 
+  logger->info("create_relocalization_factors");
 
   // ICP align with the best candidate
   auto factors = gtsam::make_shared<gtsam::NonlinearFactorGraph>();
@@ -75,9 +87,10 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
 
   double min_distance = params.max_implicit_loop_distance;
   glim::SubMap::Ptr prebuilt_map{nullptr};
+  const Eigen::Isometry3d initial_pose = T_world_endpoint_R * submap->T_origin_endpoint_R.inverse();
 
   for (int i = 0; i < prebuilt_submaps.size(); i++) {
-    const double dist = (prebuilt_submaps[i]->T_world_origin.translation() - submap->T_world_origin.translation()).norm();
+    const double dist = (prebuilt_submaps[i]->T_world_origin.translation() - initial_pose.translation()).norm();
     if (dist >= min_distance) {
       continue;
     }
@@ -87,17 +100,26 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
     }
   }
 
-  if (!prebuilt_map)
+  logger->info("min_distance: {:0.4f}, max_implicit_loop_distance: {:0.4f}", 
+    min_distance, params.max_implicit_loop_distance);
+
+
+
+  if (!prebuilt_map) {
+    logger->info("map is too far from initial pose");
     return factors;
+  }
 
 
   // example code of align, assume using one submap
   // auto & prebuilt_map = prebuilt_submaps.front();
-  const Eigen::Isometry3d initial_pose = T_world_endpoint_R * submap->T_origin_endpoint_R.inverse();
   double best_overlap_score = 0.0;
+  logger->info("find_best_candidate");
+
   auto best_initial_pose = find_best_candidate(prebuilt_map, submap, linear_search_window,
     angular_search_window, initial_pose, best_overlap_score);
-
+  logger->info("best overlap score: {:0.4f}, min score: {:0.4f}", 
+    best_overlap_score, params.min_implicit_loop_overlap);
   if (best_overlap_score < params.min_implicit_loop_overlap)
     return factors;
 
@@ -117,7 +139,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   factor->set_num_threads(2);
   graph.add(factor);
 
-  logger->debug("--- LM optimization ---");
+  logger->info("--- LM optimization for relocalization ---");
   gtsam_points::LevenbergMarquardtExtParams lm_params;
   lm_params.setlambdaInitial(1e-12);
   lm_params.setMaxIterations(10);
@@ -137,6 +159,8 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   const gtsam::Pose3 estimated_delta = values.at<gtsam::Pose3>(X(1));
   const auto linearized = factor->linearize(values);
   const auto H = linearized->hessianBlockDiagonal()[X(1)] + 1e6 * gtsam::Matrix6::Identity();
+
+  logger->info("--- found relocalization factor ---");
 
   factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(prebuilt_map->id), X(submap->id), estimated_delta, gtsam::noiseModel::Gaussian::Information(H)));
   return factors;
@@ -167,8 +191,8 @@ Eigen::Isometry3d Localization::find_best_candidate(
     double linear_search_window, double angular_search_window,
     Eigen::Isometry3d initial_pose, double& best_overlap_score) const
 {
-  double linear_step = 0.2;
-  double angular_step = 10 / 180 * M_PI;
+  double linear_step = 0.5;
+  double angular_step = 20 / 180 * M_PI;
 
   Eigen::Matrix3d rot_mat = initial_pose.rotation();
   Eigen::Vector3d euler = rot_mat.eulerAngles(0, 1, 2);
@@ -177,12 +201,8 @@ Eigen::Isometry3d Localization::find_best_candidate(
   best_overlap_score  = 0.0;
   Eigen::Isometry3d best_initial_pose;
 
-  for (double delta_x = -linear_search_window/2.0; delta_x < linear_search_window; delta_x += linear_step)
-    for (double delta_y = -linear_search_window/2.0; delta_y < linear_search_window; delta_y += linear_step)
-      for (double delta_theta = -angular_search_window/2.0; delta_theta < angular_search_window; delta_theta += angular_step) {
-
-          Eigen::Vector3d new_translation = Eigen::Vector3d(translation.x() + delta_x,
-                                              translation.y() + delta_y, translation.z());
+  
+      for (double delta_theta = -angular_search_window/2.0; delta_theta < angular_search_window / 2.0; delta_theta += angular_step) {
 
           Eigen::Matrix3d new_rotation;
           new_rotation = Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX())
@@ -190,10 +210,12 @@ Eigen::Isometry3d Localization::find_best_candidate(
               * Eigen::AngleAxisd(euler[2] + delta_theta, Eigen::Vector3d::UnitZ());
 
           Eigen::Isometry3d new_pose;
-          new_pose.translation() = new_translation;
+          new_pose.translation() = translation;
           new_pose.linear() = new_rotation;
 
           double overlap_score  = gtsam_points::overlap_auto(target_map->voxelmaps.back(), submap->frame, new_pose);
+          logger->info("overlap score {0.4f}, delta_theta: {0.4f}",
+            overlap_score, delta_theta);
           if (overlap_score < params.min_implicit_loop_overlap) {
             continue;
           }
@@ -211,14 +233,6 @@ Eigen::Isometry3d Localization::find_best_candidate(
 
 void Localization::insert_submap(const SubMap::Ptr& submap) {
   logger->debug("insert_submap id={} |frame|={}", submap->id, submap->frame->size());
-
-  if (relocalize_submap->id == submap->id && relocalization) {
-    auto relocalization_factors = create_relocalization_factors(relocalize_submap, initial_pose_, 6, 2 * M_PI);
-    if (relocalization_factors->size() > 0) {
-      new_factors->add(*relocalization_factors);
-      relocalized = true;
-    }
-  }
 
   const int current = submaps.size();
   const int last = current - 1;
@@ -315,6 +329,15 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
         new_factors
           ->emplace_shared<gtsam::ImuFactor>(E(last * 2 + 1), V(last * 2 + 1), E(current * 2), V(current * 2), B(last * 2 + 1), imu_integration->integrated_measurements());
       }
+    }
+  }
+
+  if (relocalize_submap->id == submap->id && relocalization) {
+    auto relocalization_factors = create_relocalization_factors(relocalize_submap, initial_pose_, 6, M_PI / 6.0);
+    if (relocalization_factors->size() > 0) {
+      new_factors->add(*relocalization_factors);
+      relocalized = true;
+      logger->info("Added relocalization factor");
     }
   }
 
@@ -439,6 +462,8 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_map_matching
       for (const auto& voxelmap : prebuilt_submaps[i]->voxelmaps) {
         factors->emplace_shared<gtsam_points::IntegratedVGICPFactor>(X(i), X(current), voxelmap, subsampled_submaps[current]);
       }
+
+      logger->info("Added map matching factors");
     }
 #ifdef BUILD_GTSAM_POINTS_GPU
     else if (params.registration_error_factor_type == "VGICP_GPU") {
