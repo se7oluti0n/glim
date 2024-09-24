@@ -54,6 +54,7 @@ add_library(glim SHARED
   src/glim/util/load_module.cpp
   src/glim/util/data_validator.cpp
   src/glim/util/serialization.cpp
+  src/glim/util/transform.cpp
   # preprocess
   src/glim/preprocess/cloud_preprocessor.cpp
   # common process
