@@ -20,6 +20,7 @@
 
 #include <glim/util/config.hpp>
 #include <glim/util/convert_to_string.hpp>
+#include <glim/util/transform.hpp>
 #include <glim/common/imu_integration.hpp>
 #include <glim/common/cloud_deskewing.hpp>
 #include <glim/common/cloud_covariance_estimation.hpp>
@@ -447,7 +448,9 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
   submap->id = 0;
 
   const int center = odom_frames.size() / 2;
-  submap->T_world_origin = Eigen::Isometry3d(values->at<gtsam::Pose3>(X(center)).matrix());
+  // submap->T_world_origin = remove_roll_pitch(Eigen::Isometry3de(values->at<gtsam::Pose3>(X(center)).matrix()));
+  submap->T_world_origin = Eigen::Isometry3d::Identity();
+  submap->T_world_origin.translation() = Eigen::Isometry3d(values->at<gtsam::Pose3>(X(center)).matrix()).translation();
   submap->T_origin_endpoint_L = submap->T_world_origin.inverse() * Eigen::Isometry3d(values->at<gtsam::Pose3>(X(0)).matrix());
   submap->T_origin_endpoint_R = submap->T_world_origin.inverse() * Eigen::Isometry3d(values->at<gtsam::Pose3>(X(odom_frames.size() - 1)).matrix());
 

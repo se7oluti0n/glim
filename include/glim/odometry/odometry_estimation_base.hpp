@@ -63,6 +63,8 @@ public:
    */
   static std::shared_ptr<OdometryEstimationBase> load_module(const std::string& so_name);
 
+  virtual EstimationFrame::ConstPtr get_latest_frame() const {return nullptr;};
+
 protected:
   // Logging
   std::shared_ptr<spdlog::logger> logger;

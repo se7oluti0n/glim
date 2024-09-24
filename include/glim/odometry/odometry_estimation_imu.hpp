@@ -77,6 +77,8 @@ public:
   virtual EstimationFrame::ConstPtr insert_frame(const PreprocessedFrame::Ptr& frame, std::vector<EstimationFrame::ConstPtr>& marginalized_frames) override;
   virtual std::vector<EstimationFrame::ConstPtr> get_remaining_frames() override;
 
+  virtual EstimationFrame::ConstPtr get_latest_frame() const override;
+
 protected:
   virtual void create_frame(EstimationFrame::Ptr& frame) {}
   virtual gtsam::NonlinearFactorGraph create_factors(const int current, const boost::shared_ptr<gtsam::ImuFactor>& imu_factor, gtsam::Values& new_values) = 0;

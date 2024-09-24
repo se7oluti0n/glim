@@ -5,6 +5,7 @@
 #include <opencv2/core.hpp>
 
 #include <glim/mapping/sub_map.hpp>
+#include <glim/odometry/estimation_frame.hpp>
 
 namespace spdlog {
 class logger;
@@ -70,7 +71,7 @@ public:
    */
   static std::shared_ptr<GlobalMappingBase> load_module(const std::string& so_name);
 
-  virtual void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) {}
+  virtual void relocalize(EstimationFrame::ConstPtr latest_frame, const Eigen::Isometry3d & initial_pose) {}
 
   virtual bool load(const std::string& path) {};
 

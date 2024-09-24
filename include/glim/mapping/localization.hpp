@@ -30,6 +30,10 @@ struct LocalizationParams: public GlobalMappingParams {
 public:
   LocalizationParams();
   ~LocalizationParams();
+
+public:
+  double max_localization_distance;
+  double min_localization_overlap;
 };
 
 
@@ -40,7 +44,7 @@ public:
 
   // virtual void insert_imu(const double stamp, const Eigen::Vector3d& linear_acc, const Eigen::Vector3d& angular_vel) override;
   virtual void insert_submap(const SubMap::Ptr& submap) override;
-  virtual void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) override;
+  virtual void relocalize(EstimationFrame::ConstPtr latest, const Eigen::Isometry3d & initial_pose) override;
 
   // virtual void find_overlapping_submaps(double min_overlap) override;
   // virtual void optimize() override;
@@ -68,7 +72,7 @@ private:
   Eigen::Isometry3d find_best_candidate(
     const SubMap::Ptr& target_map, const SubMap::Ptr& submap,
     double linear_search_window, double angular_search_window,
-    Eigen::Isometry3d initial_pose, double& overlap_score) const;
+    Eigen::Isometry3d initial_pose, double& overlap_score);
 
 
 private:
@@ -95,6 +99,6 @@ private:
   bool relocalization = false;
   bool relocalized = false;
   Eigen::Isometry3d initial_pose_;
-  SubMap::Ptr relocalize_submap;
+  EstimationFrame::ConstPtr latest_frame_;
 };
 }  // namespace glim

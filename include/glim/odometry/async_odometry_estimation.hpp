@@ -69,6 +69,8 @@ public:
    */
   void get_results(std::vector<EstimationFrame::ConstPtr>& estimation_results, std::vector<EstimationFrame::ConstPtr>& marginalized_frames);
 
+  EstimationFrame::ConstPtr get_latest_frame() const;
+
 private:
   void run();
 

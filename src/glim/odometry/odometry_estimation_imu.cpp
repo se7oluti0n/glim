@@ -407,4 +407,13 @@ void OdometryEstimationIMU::update_smoother(int count) {
   update_smoother(gtsam::NonlinearFactorGraph(), gtsam::Values(), std::map<std::uint64_t, double>(), count - 1);
 }
 
+EstimationFrame::ConstPtr OdometryEstimationIMU::get_latest_frame() const {
+  if (frames.size() > 0)  {
+    return frames.back();
+  }
+  else {
+    return nullptr;
+  }
+}
+
 }  // namespace glim

@@ -56,8 +56,8 @@ int AsyncGlobalMapping::workload() const {
   return input_submap_queue.size();
 }
 
-void AsyncGlobalMapping::relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose) {
-  global_mapping->relocalize(submap, initial_pose);
+void AsyncGlobalMapping::relocalize(EstimationFrame::ConstPtr latest_frame, const Eigen::Isometry3d & initial_pose) {
+  global_mapping->relocalize(latest_frame, initial_pose);
 }
 
 bool AsyncGlobalMapping::load(const std::string& path) {

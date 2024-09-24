@@ -72,7 +72,7 @@ public:
 
   std::vector<Eigen::Vector4d> export_points();
 
-  void relocalize(SubMap::Ptr submap, const Eigen::Isometry3d & initial_pose);
+  void relocalize(EstimationFrame::ConstPtr latest_frame, const Eigen::Isometry3d & initial_pose);
 
   bool load(const std::string& path);
 

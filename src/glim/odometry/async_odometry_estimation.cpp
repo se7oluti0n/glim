@@ -50,6 +50,10 @@ void AsyncOdometryEstimation::get_results(std::vector<EstimationFrame::ConstPtr>
   marginalized_frames = output_marginalized_frames.get_all_and_clear();
 }
 
+EstimationFrame::ConstPtr AsyncOdometryEstimation::get_latest_frame() const {
+  return odometry_estimation->get_latest_frame();
+}
+
 void AsyncOdometryEstimation::run() {
   double last_imu_time = enable_imu ? 0.0 : std::numeric_limits<double>::max();
   std::deque<std::pair<double, cv::Mat>> images;
