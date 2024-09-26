@@ -165,7 +165,7 @@ struct LocalizationCallbacks: public GlobalMappingCallbacks {
   static CallbackSlot<void()> on_relocalization_success;
   static CallbackSlot<void()> on_relocalization_failed;
 
-  static CallbackSlot<void(const SubMap::Ptr& query_submap, const Eigen::Isometry3d &pose)> on_update_submap_initial_pose;
+  static CallbackSlot<void(gtsam_points::PointCloud::ConstPtr query_submap, const Eigen::Isometry3d &pose)> on_update_submap_initial_pose;
 
 };
 }

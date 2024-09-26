@@ -3,6 +3,7 @@
 #include <any>
 #include <memory>
 #include <random>
+#include <thread>
 #include <boost/shared_ptr.hpp>
 // #include <glim/mapping/global_mapping_base.hpp>
 #include <glim/mapping/global_mapping.hpp>
@@ -66,11 +67,13 @@ private:
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_matching_cost_factors(int current) const;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_map_matching_cost_factors(int current) const;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_relocalization_factors(
-    const SubMap::Ptr& submap, const Eigen::Isometry3d& initial_pose,
+    int submap_id,
+    gtsam_points::PointCloud::ConstPtr cloud, const Eigen::Isometry3d& submap_pose,
+    const Eigen::Isometry3d& initial_pose,
     double linear_search_window, double angular_search_window);
 
   Eigen::Isometry3d find_best_candidate(
-    const SubMap::Ptr& target_map, const SubMap::Ptr& submap,
+    const SubMap::Ptr& target_map, gtsam_points::PointCloud::ConstPtr cloud, const Eigen::Isometry3d& submap_pose,
     double linear_search_window, double angular_search_window,
     Eigen::Isometry3d initial_pose, double& overlap_score);
 
@@ -96,9 +99,12 @@ private:
 
   // std::shared_ptr<void> tbb_task_arena;
 
-  bool relocalization = false;
+  bool do_relocalization = false;
   bool relocalized = false;
   Eigen::Isometry3d initial_pose_;
   EstimationFrame::ConstPtr latest_frame_;
+  boost::shared_ptr<gtsam::NonlinearFactorGraph> relocalization_factors_;
+  std::shared_ptr<std::thread> relocalize_thread_;
+  // Submap::Ptr relocalize_submap_;
 };
 }  // namespace glim

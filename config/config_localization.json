@@ -14,7 +14,7 @@
     "registration_error_factor_type": "VGICP",
     "randomsampling_rate": 0.2,
     "submap_voxel_resolution": 0.5,
-    "submap_voxelmap_levels": 1,
+    "submap_voxelmap_levels": 3,
     "submap_voxelmap_scaling_factor": 2.0,
     "max_implicit_loop_distance": 100.0,
     "min_implicit_loop_overlap": 0.2,

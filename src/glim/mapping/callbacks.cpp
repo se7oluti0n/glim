@@ -27,7 +27,7 @@ CallbackSlot<void(double)> GlobalMappingCallbacks::request_to_find_overlapping_s
 
 CallbackSlot<void(const SubMap::ConstPtr& frame)> LocalizationCallbacks::on_insert_localization_submap;
 CallbackSlot<void(const std::vector<SubMap::Ptr>& submaps)> LocalizationCallbacks::on_update_localization_submaps;
-CallbackSlot<void(const SubMap::Ptr& query_submap, const Eigen::Isometry3d &pose)> LocalizationCallbacks::on_update_submap_initial_pose;
+CallbackSlot<void(gtsam_points::PointCloud::ConstPtr query_submap, const Eigen::Isometry3d &pose)> LocalizationCallbacks::on_update_submap_initial_pose;
 
 // CallbackSlot<void(const SubMap::ConstPtr& frame)> LocalizationCallbacks::on_update_localization_submaps;
 }  // namespace glim
