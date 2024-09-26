@@ -35,6 +35,9 @@ public:
 public:
   double max_localization_distance;
   double min_localization_overlap;
+  double linear_search_window;
+  double angular_search_window;
+  double relocalization_factor_noise;
 };
 
 
@@ -69,8 +72,7 @@ private:
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_relocalization_factors(
     int submap_id,
     gtsam_points::PointCloud::ConstPtr cloud, const Eigen::Isometry3d& submap_pose,
-    const Eigen::Isometry3d& initial_pose,
-    double linear_search_window, double angular_search_window);
+    const Eigen::Isometry3d& initial_pose);
 
   Eigen::Isometry3d find_best_candidate(
     const SubMap::Ptr& target_map, gtsam_points::PointCloud::ConstPtr cloud, const Eigen::Isometry3d& submap_pose,
