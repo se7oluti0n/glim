@@ -107,6 +107,8 @@ private:
   EstimationFrame::ConstPtr latest_frame_;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> relocalization_factors_;
   std::shared_ptr<std::thread> relocalize_thread_;
+  int target_submap_id_{-1};
+  int query_submap_id_{-1};
   // Submap::Ptr relocalize_submap_;
 };
 }  // namespace glim

@@ -185,6 +185,10 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(prebuilt_map->id), X(submap_id),
        estimated_delta, prior_noise6));
   logger->info("--- Added btween factor, M{}, X{}---", prebuilt_map->id, submap_id);
+  logger->info("--- Pose, M{}, X{}---", convert_to_string(prebuilt_map->T_world_origin), 
+    convert_to_string(submap_pose));
+  target_submap_id_ = prebuilt_map->id;
+  query_submap_id_ = submap_id;
   return factors;
 }
 
@@ -203,9 +207,10 @@ Eigen::Isometry3d Localization::find_best_candidate(
   const Eigen::Isometry3d T_map_local = T_map_frame * T_local_frame.inverse();
   const Eigen::Isometry3d T_map_submap = T_map_local * submap_pose;
 
-  logger->info("T_map_local: {}, T_map_submap: {}, submap->T_world_origin: {}",
+  logger->info("T_map_local: {}\n, T_map_submap: {}\n, submap->T_world_origin: {}\n,T_map_frame: {} ",
     convert_to_string(T_map_local), convert_to_string(T_map_submap),
-    convert_to_string(submap_pose)
+    convert_to_string(submap_pose),
+    convert_to_string(T_map_frame)
   );
 
   Eigen::Matrix3d rot_mat = T_map_submap.rotation();
@@ -286,7 +291,8 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
   submap->drop_frame_points();
 
   if (current == 0) {
-    new_factors->emplace_shared<gtsam_points::LinearDampingFactor>(X(0), 6, params.init_pose_damping_scale);
+    // new_factors->emplace_shared<gtsam_points::LinearDampingFactor>(X(0), 6, params.init_pose_damping_scale);
+     new_factors->emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(0), current_T_world_submap, gtsam::noiseModel::Isotropic::Precision(6, 1e6));
   } else {
     new_factors->add(*create_between_factors(current));
 
@@ -294,8 +300,8 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
     // new_factors->add(*create_map_matching_cost_factors(current));
 
     // create localization factor
-    if (relocalized)
-      new_factors->add(*create_map_matching_cost_factors(current));
+    // if (relocalized)
+    //   new_factors->add(*create_map_matching_cost_factors(current));
   }
 
   if (params.enable_imu) {
@@ -362,8 +368,9 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
   }
 
   if (relocalization_factors_ && relocalization_factors_->size() > 0) {
+      logger->info("Before add: {}", new_factors->size());
       new_factors->add(*relocalization_factors_);
-      logger->info("Added relocalization factor");
+      logger->info("Added relocalization factor: {}", new_factors->size());
       relocalized = true;
       relocalization_factors_.reset();
   }
@@ -380,6 +387,12 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
   new_factors.reset(new gtsam::NonlinearFactorGraph);
 
   update_submaps();
+
+  if (target_submap_id_ > -1)
+    logger->info("target map: {}, query map: {}", 
+      convert_to_string(prebuilt_submaps[target_submap_id_]->T_world_origin),
+      convert_to_string(submaps[query_submap_id_]->T_world_origin)
+      );
   Callbacks::on_update_submaps(submaps);
 }
 
