@@ -38,6 +38,7 @@ public:
   double linear_search_window;
   double angular_search_window;
   double relocalization_factor_noise;
+  std::string output_debug_factor_graph;
 };
 
 
@@ -68,7 +69,8 @@ private:
 
   // boost::shared_ptr<gtsam::NonlinearFactorGraph> create_between_factors(int current) const;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_matching_cost_factors(int current) const;
-  boost::shared_ptr<gtsam::NonlinearFactorGraph> create_map_matching_cost_factors(int current) const;
+  boost::shared_ptr<gtsam::NonlinearFactorGraph> create_map_matching_cost_factors(
+    int current, const Eigen::Isometry3d& current_T_world_submap) const;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_relocalization_factors(
     int submap_id,
     gtsam_points::PointCloud::ConstPtr cloud, const Eigen::Isometry3d& submap_pose,
