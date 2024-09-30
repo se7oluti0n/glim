@@ -52,7 +52,8 @@ gtsam::Pose3 match_pointcloud_VGICP(
   const gtsam::Pose3& init_delta,
   const std::vector<gtsam_points::GaussianVoxelMap::Ptr>& voxelmaps,
   gtsam_points::PointCloud::ConstPtr source,
-  std::shared_ptr<spdlog::logger> logger)
+  std::shared_ptr<spdlog::logger> logger,
+  double &overlap)
 {
   gtsam::Values values;
   values.insert(X(0), gtsam::Pose3::Identity());
@@ -85,6 +86,8 @@ gtsam::Pose3 match_pointcloud_VGICP(
 #endif
 
   gtsam::Pose3 estimated_delta = values.at<gtsam::Pose3>(X(1));
+  overlap = gtsam_points::overlap_auto(voxelmaps[0], source,
+    Eigen::Isometry3d(estimated_delta.matrix()));
 
   return estimated_delta;
 }
@@ -166,17 +169,14 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
 
   const gtsam::Pose3 init_delta = gtsam::Pose3((prebuilt_map->T_world_origin.inverse() * best_initial_pose).matrix());
 
+  double overlap_score = 0.0;
   const gtsam::Pose3 estimated_delta = match_pointcloud_VGICP(
-    init_delta, prebuilt_map->voxelmaps, subsampled_frame, logger);
+    init_delta, prebuilt_map->voxelmaps, subsampled_frame, logger, overlap_score);
   const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_noise);
 
 
   Eigen::Isometry3d optimized_pose = prebuilt_map->T_world_origin * Eigen::Isometry3d(estimated_delta.matrix());
   Callbacks::on_update_submap_initial_pose(subsampled_frame, optimized_pose);
-
-  double overlap_score  = gtsam_points::overlap_auto(
-    prebuilt_map->voxelmaps[0], subsampled_frame,
-    Eigen::Isometry3d(estimated_delta.matrix()));
 
   logger->info("--- optimized relocalization factor, overlap score: {:0.5f}---", overlap_score);
 
@@ -395,6 +395,68 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
   Callbacks::on_update_submaps(submaps);
 }
 
+boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_between_factors(int current) const {
+  auto factors = gtsam::make_shared<gtsam::NonlinearFactorGraph>();
+  if (current == 0 || !params.enable_between_factors) {
+    return factors;
+  }
+
+  const int last = current - 1;
+  // const gtsam::Pose3 init_delta = gtsam::Pose3((submaps[last]->T_world_origin.inverse() * submaps[current]->T_world_origin).matrix());
+
+  const Eigen::Isometry3d T_origin0_endpointR0 = submaps[last]->T_origin_endpoint_R;
+  const Eigen::Isometry3d T_origin1_endpointL1 = submaps[current]->T_origin_endpoint_L;
+  const Eigen::Isometry3d T_endpointR0_endpointL1 = submaps[last]->odom_frames.back()->T_world_sensor().inverse() * submaps[current]->odom_frames.front()->T_world_sensor();
+  const Eigen::Isometry3d T_origin0_origin1 = T_origin0_endpointR0 * T_endpointR0_endpointL1 * T_origin1_endpointL1.inverse();
+
+  const gtsam::Pose3 init_delta = gtsam::Pose3(T_origin0_origin1.matrix());
+
+
+  if (params.between_registration_type == "NONE") {
+    factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(X(last), X(current), init_delta, gtsam::noiseModel::Isotropic::Precision(6, 1e6)));
+    return factors;
+  }
+
+  gtsam::Values values;
+  values.insert(X(0), gtsam::Pose3::Identity());
+  values.insert(X(1), init_delta);
+
+  gtsam::NonlinearFactorGraph graph;
+  graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(0), gtsam::Pose3::Identity(), gtsam::noiseModel::Isotropic::Precision(6, 1e6));
+
+  auto factor = gtsam::make_shared<gtsam_points::IntegratedGICPFactor>(X(0), X(1), submaps[last]->frame, submaps[current]->frame);
+  factor->set_max_correspondence_distance(0.5);
+  factor->set_num_threads(2);
+  graph.add(factor);
+
+  logger->info("--- create_between_factors IntegratedGICPFactor , initial delta: {} ---"
+    , convert_to_string(Eigen::Isometry3d(init_delta.matrix())));
+
+  gtsam_points::LevenbergMarquardtExtParams lm_params;
+  lm_params.setlambdaInitial(1e-12);
+  lm_params.setMaxIterations(10);
+  lm_params.callback = [this](const auto& status, const auto& values) { logger->debug(status.to_string()); };
+
+#ifdef GTSAM_USE_TBB
+  auto arena = static_cast<tbb::task_arena*>(tbb_task_arena.get());
+  arena->execute([&] {
+#endif
+    gtsam_points::LevenbergMarquardtOptimizerExt optimizer(graph, values, lm_params);
+    values = optimizer.optimize();
+
+#ifdef GTSAM_USE_TBB
+  });
+#endif
+
+  const gtsam::Pose3 estimated_delta = values.at<gtsam::Pose3>(X(1));
+  const auto linearized = factor->linearize(values);
+  const auto H = linearized->hessianBlockDiagonal()[X(1)] + 1e6 * gtsam::Matrix6::Identity();
+  logger->info("--- BetweenFactor , estimated_delta: {} ---"
+    ,  convert_to_string(Eigen::Isometry3d(estimated_delta.matrix())));
+  factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(X(last), X(current), estimated_delta, gtsam::noiseModel::Gaussian::Information(H)));
+  return factors;
+}
+
 bool Localization::load(const std::string& path) {
   std::ifstream ifs(path + "/graph.txt");
   if (!ifs) {
@@ -502,14 +564,15 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_map_matching
       // for (const auto& voxelmap : prebuilt_submaps[i]->voxelmaps) {
       //   factors->emplace_shared<gtsam_points::IntegratedVGICPFactor>(M(i), X(current), voxelmap, subsampled_submaps[current]);
       // }
+      double factor_overlap_score = 0.0;
       const gtsam::Pose3 estimated_delta = match_pointcloud_VGICP(
-        gtsam::Pose3(delta.matrix()), prebuilt_submaps[i]->voxelmaps, subsampled_submaps[current], logger);
+        gtsam::Pose3(delta.matrix()), prebuilt_submaps[i]->voxelmaps, subsampled_submaps[current], logger, factor_overlap_score);
       const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_noise);
 
       factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(i), X(current),
           estimated_delta, prior_noise6));
 
-      logger->info("Added BetweenFactor matching factors: from M({}) --> X({})", i, current);
+      logger->info("Added BetweenFactor matching factors: from M({}) --> X({}), overlap: {}", i, current, factor_overlap_score);
       break;
     }
 
