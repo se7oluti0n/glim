@@ -52,7 +52,7 @@ public:
   virtual void relocalize(EstimationFrame::ConstPtr latest, const Eigen::Isometry3d & initial_pose) override;
 
   // virtual void find_overlapping_submaps(double min_overlap) override;
-  // virtual void optimize() override;
+  virtual void optimize() override;
 
   // virtual void save(const std::string& path) override;
   // virtual std::vector<Eigen::Vector4d> export_points() override;

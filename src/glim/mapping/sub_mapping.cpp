@@ -50,6 +50,7 @@ SubMappingParams::SubMappingParams() {
   keyframe_update_min_points = config.param<int>("sub_mapping", "keyframe_update_min_points", 500);
   keyframe_update_interval_rot = config.param<double>("sub_mapping", "keyframe_update_interval_rot", 3.15);
   keyframe_update_interval_trans = config.param<double>("sub_mapping", "keyframe_update_interval_trans", 1.0);
+  keyframe_update_interval_time = config.param<double>("sub_mapping", "keyframe_update_interval_time", 5.0);
   max_keyframe_overlap = config.param<double>("sub_mapping", "max_keyframe_overlap", 0.8);
 
   create_between_factors = config.param<bool>("sub_mapping", "create_between_factors", true);
@@ -258,8 +259,13 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
       const Eigen::Isometry3d delta_from_keyframe = keyframes.back()->T_world_sensor().inverse() * odom_frame->T_world_sensor();
       const double delta_trans = delta_from_keyframe.translation().norm();
       const double delta_angle = Eigen::AngleAxisd(delta_from_keyframe.linear()).angle();
+      const double delta_time = fabs(keyframes.back()->stamp - odom_frame->stamp);
 
-      insert_as_keyframe = delta_trans > params.keyframe_update_interval_trans || delta_angle > params.keyframe_update_interval_rot;
+
+
+      insert_as_keyframe = delta_trans > params.keyframe_update_interval_trans 
+                    || delta_angle > params.keyframe_update_interval_rot
+                    || delta_time > params.keyframe_update_interval_time;
     } else {
       logger->warn("unknown keyframe update strategy ({})", params.keyframe_update_strategy);
     }
@@ -268,9 +274,11 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
   // Create a new keyframe
   if (insert_as_keyframe) {
     logger->debug("insert frame as keyframe");
+    // logger->info("insert frame as keyframe");
     insert_keyframe(current, odom_frame);
     Callbacks::on_new_keyframe(current, keyframes.back());
-
+    
+    
     // Create registration error factors (fully connected)
     for (int i = 0; i < keyframes.size() - 1; i++) {
       if (keyframes[i]->frame->size() == 0 || keyframes.back()->frame->size() == 0) {
@@ -416,7 +424,7 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
     return nullptr;
   }
 
-  logger->debug("create_submap");
+  logger->warn("create_submap, |keyframes|={}", keyframes.size());
   // Optimization
   Callbacks::on_optimize_submap(*graph, *values);
   gtsam_points::LevenbergMarquardtExtParams lm_params;
@@ -489,7 +497,7 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
   if (submap->frame == nullptr) {
     submap->frame = gtsam_points::merge_frames_auto(poses_to_merge, keyframes_to_merge, params.submap_downsample_resolution);
   }
-  logger->debug("|merged_submap|={}", submap->frame->size());
+  logger->warn("|merged_submap|={}", submap->frame->size());
 
   if (params.submap_target_num_points > 0 && submap->frame->size() > params.submap_target_num_points) {
     std::mt19937 mt(submap_count * 643145 + submap->frame->size() * 4312);  // Just a random-like seed
@@ -508,7 +516,7 @@ std::vector<SubMap::Ptr> SubMapping::get_submaps() {
 
 std::vector<SubMap::Ptr> SubMapping::submit_end_of_sequence() {
   std::vector<SubMap::Ptr> submaps;
-  if (!odom_frames.empty()) {
+  if (!keyframes.empty()) {
     auto new_submap = create_submap(true);
 
     if (new_submap) {

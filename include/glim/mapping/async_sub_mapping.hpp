@@ -81,6 +81,8 @@ private:
   ConcurrentVector<SubMap::Ptr> output_submap_queue;
 
   std::shared_ptr<glim::SubMappingBase> sub_mapping;
+  // Logging
+  std::shared_ptr<spdlog::logger> logger;
 };
 
 }  // namespace  glim

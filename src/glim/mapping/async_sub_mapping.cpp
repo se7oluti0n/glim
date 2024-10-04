@@ -1,8 +1,10 @@
 #include <glim/mapping/async_sub_mapping.hpp>
+#include <glim/util/logging.hpp>
 
 namespace glim {
 
-AsyncSubMapping::AsyncSubMapping(const std::shared_ptr<glim::SubMappingBase>& sub_mapping) : sub_mapping(sub_mapping) {
+AsyncSubMapping::AsyncSubMapping(const std::shared_ptr<glim::SubMappingBase>& sub_mapping) : 
+  sub_mapping(sub_mapping), logger(create_module_logger("submap")) {
   kill_switch = false;
   end_of_sequence = false;
   thread = std::thread([this] { run(); });

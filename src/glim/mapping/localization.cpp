@@ -175,10 +175,15 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   Callbacks::on_update_submap_initial_pose(subsampled_frame, optimized_pose);
 
   double overlap_score  = gtsam_points::overlap_auto(
-    prebuilt_map->voxelmaps[0], subsampled_frame,
+    prebuilt_map->voxelmaps.back(), subsampled_frame,
     Eigen::Isometry3d(estimated_delta.matrix()));
 
   logger->info("--- optimized relocalization factor, overlap score: {:0.5f}---", overlap_score);
+  if (overlap_score < params.min_localization_overlap)
+  {
+    logger->info("relocalization factor score is too low");
+    return factors;
+  }
 
   factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(prebuilt_map->id), X(submap_id),
        estimated_delta, prior_noise6));
@@ -197,6 +202,7 @@ Eigen::Isometry3d Localization::find_best_candidate(
 {
 
   logger->info("find_best_candidate from prebuild submap: id={}", target_map->id);
+  logger->info("Input T_map_frame:= {}", convert_to_string(T_map_frame));
 
   double linear_step = 0.5;
   double angular_step = 10.0 / 180.0 * M_PI;
@@ -217,7 +223,7 @@ Eigen::Isometry3d Localization::find_best_candidate(
   double delta_z = 0.0;
   for ( delta_x = -linear_search_window / 2.0; delta_x < linear_search_window / 2.0; delta_x += linear_step)
   for ( delta_y = -linear_search_window / 2.0; delta_y < linear_search_window / 2.0; delta_y += linear_step)
-  // for ( delta_z = -1.0; delta_z < 1.0; delta_z += linear_step)
+  for ( delta_z = -linear_search_window / 4.0; delta_z < linear_search_window / 4.0; delta_z += linear_step)
   for (double delta_theta = -angular_search_window/2.0; delta_theta < angular_search_window / 2.0; delta_theta = delta_theta + angular_step) {
     Eigen::Matrix3d new_rotation;
     new_rotation = Eigen::AngleAxisd(euler[2] + delta_theta, Eigen::Vector3d::UnitZ());
@@ -353,9 +359,18 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
     auto submap_frame = subsampled_submaps[submap->id];
     auto submap_pose = submap->T_world_origin;
     auto submap_id = submap->id;
+    if (relocalize_thread_) {
+      relocalize_thread_->join();
+      relocalize_thread_.reset();
+    }
+
     relocalize_thread_ = std::make_shared<std::thread>([this, submap_frame, submap_pose, submap_id]{
       relocalization_factors_ = create_relocalization_factors(
         submap_id, submap_frame, submap_pose, initial_pose_);
+
+      if (relocalization_factors_->size() > 0) {
+        LocalizationCallbacks::request_to_optimize();
+      }
     });
   }
 
@@ -392,6 +407,35 @@ void Localization::insert_submap(const SubMap::Ptr& submap) {
       convert_to_string(Eigen::Isometry3d(isam2->calculateEstimate<gtsam::Pose3>(M(target_submap_id_)).matrix())),
       convert_to_string(submaps[query_submap_id_]->T_world_origin)
       );
+  Callbacks::on_update_submaps(submaps);
+}
+
+void Localization::optimize() {
+  // logger->warn("Localization module optimize");
+
+  gtsam::NonlinearFactorGraph new_factors;
+  gtsam::Values new_values;
+
+  bool has_relocalization_factor = false;
+  if (relocalization_factors_ && relocalization_factors_->size() > 0) {
+      // logger->info("Before add: {}", new_factors->size());
+      new_factors.add(*relocalization_factors_);
+      logger->info("Localization::optimize(): Added relocalization factor: {}", new_factors.size());
+      has_relocalization_factor = true;
+      relocalization_factors_.reset();
+  }
+  else if (isam2->empty()) {
+    return;
+  }
+
+  Callbacks::on_smoother_update(*isam2, new_factors, new_values);
+  auto result = update_isam2(new_factors, new_values);
+  if (has_relocalization_factor)
+      relocalized = true;
+
+  Callbacks::on_smoother_update_result(*isam2, result);
+
+  update_submaps();
   Callbacks::on_update_submaps(submaps);
 }
 
@@ -492,7 +536,10 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_map_matching
     }
 
     const Eigen::Isometry3d delta = prebuilt_submaps[i]->T_world_origin.inverse() * current_T_world_submap;
-    const double overlap = gtsam_points::overlap_auto(prebuilt_submaps[i]->voxelmaps[0], current_submap->frame, delta);
+    const double overlap = gtsam_points::overlap_auto(prebuilt_submaps[i]->voxelmaps.back(), current_submap->frame, delta);
+
+    logger->info("create map matching: from M({}) --> X({}, overlap score: {} ",
+      i, current, overlap);
 
     if (overlap < params.min_implicit_loop_overlap) {
       continue;

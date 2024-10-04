@@ -36,6 +36,7 @@ public:
   int keyframe_update_min_points;
   double keyframe_update_interval_rot;
   double keyframe_update_interval_trans;
+  double keyframe_update_interval_time;
   double max_keyframe_overlap;
 
   bool create_between_factors;
