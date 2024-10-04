@@ -174,13 +174,8 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
     init_delta, prebuilt_map->voxelmaps, subsampled_frame, logger, overlap_score);
   const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_noise);
 
-
   Eigen::Isometry3d optimized_pose = prebuilt_map->T_world_origin * Eigen::Isometry3d(estimated_delta.matrix());
   Callbacks::on_update_submap_initial_pose(subsampled_frame, optimized_pose);
-
-  double overlap_score  = gtsam_points::overlap_auto(
-    prebuilt_map->voxelmaps.back(), subsampled_frame,
-    Eigen::Isometry3d(estimated_delta.matrix()));
 
   logger->info("--- optimized relocalization factor, overlap score: {:0.5f}---", overlap_score);
   if (overlap_score < params.min_localization_overlap)
@@ -618,6 +613,12 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_map_matching
       double factor_overlap_score = 0.0;
       const gtsam::Pose3 estimated_delta = match_pointcloud_VGICP(
         gtsam::Pose3(delta.matrix()), prebuilt_submaps[i]->voxelmaps, subsampled_submaps[current], logger, factor_overlap_score);
+
+      if (factor_overlap_score < params.min_localization_overlap)
+      {
+        // logger->info("Map matching factor score is too low: {}", factor_overlap_score);
+        continue;
+      }
       const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_noise);
 
       factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(i), X(current),
