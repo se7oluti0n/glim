@@ -67,7 +67,7 @@ public:
 
 private:
 
-  // boost::shared_ptr<gtsam::NonlinearFactorGraph> create_between_factors(int current) const;
+  boost::shared_ptr<gtsam::NonlinearFactorGraph> create_between_factors(int current) const;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_matching_cost_factors(int current) const;
   boost::shared_ptr<gtsam::NonlinearFactorGraph> create_map_matching_cost_factors(
     int current, const Eigen::Isometry3d& current_T_world_submap) const;
