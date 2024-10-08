@@ -4,7 +4,7 @@
   */
   "global_mapping": {
     "so_name": "liblocalization.so",
-    "map_path": "/home/manh/Documents/Ketqua",
+    "map_path": "/home/manh/Documents/anland02",
     "enable_imu": true,
     "enable_optimization": true,
     "init_pose_damping_scale": 1.0,
