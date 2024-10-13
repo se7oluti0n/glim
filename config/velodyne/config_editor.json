@@ -29,7 +29,7 @@
   // imu_topic              : IMU topic
   // points_topic           : Points topic
   // image_topic            : Image topic (required for only extension modules)
-  "glim_ros": {
+  "editor": {
     // Backend modules
     "enable_local_mapping": true,
     "enable_global_mapping": true,
@@ -49,10 +49,11 @@
     "tf_time_offset": 1e-6,
     // Extension modules
     "extension_modules": [
-      "libmemory_monitor.so",
-      "libstandard_viewer.so",
+      // "libmemory_monitor.so",
+      // "libstandard_viewer.so",
       "librviz_viewer.so",
       "libglim_octomap.so"
+
       // "libimu_validator.so"
     ],
     // Topics

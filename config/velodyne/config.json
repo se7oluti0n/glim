@@ -3,6 +3,8 @@
   "global": {
     "config_path": "",
     "config_ros": "config_ros.json",
+    "config_editor": "config_editor.json",
+    "config_octomap": "config_octomap.json",
     "config_viewer": "config_viewer.json",
     "config_sensors": "config_sensors.json",
     "config_preprocess": "config_preprocess.json",
