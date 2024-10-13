@@ -27,7 +27,7 @@
     "linear_search_window": 6.0,
     // 2 * pi
     "angular_search_window": 6.28,
-    "relocalization_factor_noise": 1e6,
+    "relocalization_factor_weight": 1e6,
     "output_debug_factor_graph": "/home/manh/Desktop/graph.txt"
 
   }

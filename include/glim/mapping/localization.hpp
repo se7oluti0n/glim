@@ -37,7 +37,8 @@ public:
   double min_localization_overlap;
   double linear_search_window;
   double angular_search_window;
-  double relocalization_factor_noise;
+  double relocalization_factor_weight;
+  double loc_between_factor_weight;
   std::string output_debug_factor_graph;
 };
 

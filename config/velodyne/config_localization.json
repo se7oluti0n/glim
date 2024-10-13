@@ -24,12 +24,12 @@
     "isam2_relinearize_skip": 1,
     "isam2_relinearize_thresh": 0.1,
     "max_localization_distance": 30.0,
-    "min_localization_overlap": 0.1,
+    "min_localization_overlap": 0.05,
     "linear_search_window": 10.0,
     // 2 * pi
     "angular_search_window": 6.28,
-    "relocalization_factor_noise": 1e6,
+    "relocalization_factor_weight": 1e10,
+    "loc_between_factor_weight": 1e3,
     "output_debug_factor_graph": "/home/manh/Desktop/graph.txt"
-
   }
 }

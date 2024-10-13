@@ -99,7 +99,8 @@ LocalizationParams::LocalizationParams(): GlobalMappingParams() {
   min_localization_overlap = config.param<double>("global_mapping", "min_localization_overlap", 0.1);
   linear_search_window = config.param<double>("global_mapping", "linear_search_window", 6.0);
   angular_search_window = config.param<double>("global_mapping", "angular_search_window", 0.1);
-  relocalization_factor_noise = config.param<double>("global_mapping", "relocalization_factor_noise", 1e2);
+  relocalization_factor_weight = config.param<double>("global_mapping", "relocalization_factor_weight", 1e2);
+  loc_between_factor_weight = config.param<double>("global_mapping", "loc_between_factor_weight", 1e2);
   output_debug_factor_graph = config.param<std::string>("global_mapping", "output_debug_factor_graph", "");
 }
 
@@ -172,7 +173,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_relocalizati
   double overlap_score = 0.0;
   const gtsam::Pose3 estimated_delta = match_pointcloud_VGICP(
     init_delta, prebuilt_map->voxelmaps, subsampled_frame, logger, overlap_score);
-  const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_noise);
+  const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_weight);
 
   Eigen::Isometry3d optimized_pose = prebuilt_map->T_world_origin * Eigen::Isometry3d(estimated_delta.matrix());
   Callbacks::on_update_submap_initial_pose(subsampled_frame, optimized_pose);
@@ -493,7 +494,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_between_fact
 
   const gtsam::Pose3 estimated_delta = values.at<gtsam::Pose3>(X(1));
   const auto linearized = factor->linearize(values);
-  const auto H = linearized->hessianBlockDiagonal()[X(1)] + 1e6 * gtsam::Matrix6::Identity();
+  const auto H = linearized->hessianBlockDiagonal()[X(1)] + params.loc_between_factor_weight * gtsam::Matrix6::Identity();
   logger->info("--- BetweenFactor , estimated_delta: {} ---"
     ,  convert_to_string(Eigen::Isometry3d(estimated_delta.matrix())));
   factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(X(last), X(current), estimated_delta, gtsam::noiseModel::Gaussian::Information(H)));
@@ -506,6 +507,9 @@ bool Localization::load(const std::string& path) {
     logger->error("failed to open {}/graph.txt", path);
     return false;
   }
+
+  prebuilt_submaps.clear();
+  isam2->clear();
 
   std::string token;
   int num_submaps, num_all_frames, num_matching_cost_factors;
@@ -619,7 +623,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> Localization::create_map_matching
         // logger->info("Map matching factor score is too low: {}", factor_overlap_score);
         continue;
       }
-      const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_noise);
+      const auto prior_noise6 = gtsam::noiseModel::Isotropic::Precision(6, params.relocalization_factor_weight);
 
       factors->add(gtsam::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(M(i), X(current),
           estimated_delta, prior_noise6));
