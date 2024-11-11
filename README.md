@@ -1,5 +1,9 @@
 ![GLIM](docs/assets/logo2.png "GLIM Logo")
 
+## Change notes
+
+- Support wheel odometry through params in `odometry_estimation_cpu.json`. Handle long corridor case
+
 ## Introduction
 
 **GLIM** is a versatile and extensible range-based 3D mapping framework.
