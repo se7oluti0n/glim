@@ -28,6 +28,14 @@ public:
   virtual bool requires_imu() const { return true; }
 
   /**
+   * @brief Insert an Raw Differential Wheel angular velocity
+   * @param stamp         Timestamp
+   * @param left_angular_vel    Left wheel angular velocity rad/s
+   * @param right_angular_vel   Right wheel angular velocity rad/s
+   */
+  virtual void insert_raw_odom(const double stamp, const double left_angular_vel, const double right_angular_vel) {}
+  
+  /**
    * @brief Insert an image
    * @param stamp   Timestamp
    * @param image   Image

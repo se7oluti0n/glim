@@ -32,6 +32,14 @@ public:
   ~AsyncOdometryEstimation();
 
   /**
+   * @brief Insert an Raw Differential Wheel angular velocity
+   * @param stamp         Timestamp
+   * @param left_angular_vel    Left wheel angular velocity rad/s
+   * @param right_angular_vel   Right wheel angular velocity rad/s
+   */
+  void insert_raw_odom(const double stamp, const double left_angular_vel, const double right_angular_vel);
+
+  /**
    * @brief Insert an image into the odometry estimation
    * @param stamp   Timestamp
    * @param image   Image
@@ -81,6 +89,9 @@ private:
   ConcurrentVector<std::pair<double, cv::Mat>> input_image_queue;
   ConcurrentVector<Eigen::Matrix<double, 7, 1>> input_imu_queue;
   ConcurrentVector<PreprocessedFrame::Ptr> input_frame_queue;
+
+  // wheel 
+  ConcurrentVector<Eigen::Matrix<double, 3, 1>> input_raw_odom_queue;
 
   // Output queues
   ConcurrentVector<EstimationFrame::ConstPtr> output_estimation_results;

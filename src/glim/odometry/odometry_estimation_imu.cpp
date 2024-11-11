@@ -13,6 +13,7 @@
 #include <glim/util/config.hpp>
 #include <glim/util/convert_to_string.hpp>
 #include <glim/common/imu_integration.hpp>
+#include <glim/common/odom_integration.hpp>
 #include <glim/common/cloud_deskewing.hpp>
 #include <glim/common/cloud_covariance_estimation.hpp>
 #include <glim/odometry/initial_state_estimation.hpp>
@@ -65,6 +66,15 @@ OdometryEstimationIMUParams::OdometryEstimationIMUParams() {
 
   num_threads = config.param<int>("odometry_estimation", "num_threads", 4);
   num_smoother_update_threads = 1;
+
+  // wheel factor
+  T_robot_imu = sensor_config.param<Eigen::Isometry3d>("sensors", "T_robot_imu", Eigen::Isometry3d::Identity());
+  wheel_radius = config.param<double>("odometry_estimation", "wheel_radius", 0.081);
+  wheel_base = config.param<double>("odometry_estimation", "wheel_base", 0.37);
+  use_wheel = config.param<bool>("odometry_estimation", "use_wheel", false);
+
+  differential_drive_model_noise = config.param<double>("odometry_estimation", "differential_drive_model_noise", 1e6);
+  wheel_odometry_noise = config.param<double>("odometry_estimation", "wheel_odometry_noise", 1e8);
 }
 
 OdometryEstimationIMUParams::~OdometryEstimationIMUParams() {}
@@ -88,6 +98,7 @@ OdometryEstimationIMU::OdometryEstimationIMU(std::unique_ptr<OdometryEstimationI
   }
 
   imu_integration.reset(new IMUIntegration);
+  odom_integration.reset(new OdomIntegration);
   deskewing.reset(new CloudDeskewing);
   covariance_estimation.reset(new CloudCovarianceEstimation(params->num_threads));
 
@@ -105,6 +116,11 @@ OdometryEstimationIMU::OdometryEstimationIMU(std::unique_ptr<OdometryEstimationI
 }
 
 OdometryEstimationIMU::~OdometryEstimationIMU() {}
+
+void OdometryEstimationIMU::insert_raw_odom(const double stamp, const double left_angular_vel, const double right_angular_vel) {
+  if (params->use_wheel)
+    odom_integration->insert_raw_odom(stamp, left_angular_vel, right_angular_vel);
+}
 
 void OdometryEstimationIMU::insert_imu(const double stamp, const Eigen::Vector3d& linear_acc, const Eigen::Vector3d& angular_vel) {
   Callbacks::on_insert_imu(stamp, linear_acc, angular_vel);

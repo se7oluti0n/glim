@@ -20,6 +20,12 @@ AsyncOdometryEstimation::~AsyncOdometryEstimation() {
   join();
 }
 
+void AsyncOdometryEstimation::insert_raw_odom(const double stamp, const double left_angular_vel, const double right_angular_vel) {
+  Eigen::Matrix<double, 3, 1> odom_data;
+  odom_data << stamp, left_angular_vel, right_angular_vel;
+  input_raw_odom_queue.push_back(odom_data);
+}
+
 void AsyncOdometryEstimation::insert_image(const double stamp, const cv::Mat& image) {
   input_image_queue.push_back(std::make_pair(stamp, image));
 }
@@ -59,6 +65,7 @@ void AsyncOdometryEstimation::run() {
     auto imu_frames = input_imu_queue.get_all_and_clear();
     auto new_images = input_image_queue.get_all_and_clear();
     auto new_raw_frames = input_frame_queue.get_all_and_clear();
+    auto odom_frames = input_raw_odom_queue.get_all_and_clear();
 
     images.insert(images.end(), new_images.begin(), new_images.end());
     raw_frames.insert(raw_frames.end(), new_raw_frames.begin(), new_raw_frames.end());
@@ -80,6 +87,13 @@ void AsyncOdometryEstimation::run() {
       odometry_estimation->insert_imu(stamp, linear_acc, angular_vel);
 
       last_imu_time = stamp;
+    }
+
+    for (const auto& odom: odom_frames) {
+      const double stamp = odom[0];
+      const double left_angular_vel = odom[1];
+      const double right_angular_vel = odom[2];
+      odometry_estimation->insert_raw_odom(stamp, left_angular_vel, right_angular_vel);
     }
 
     while (!images.empty()) {

@@ -18,6 +18,8 @@
 #include <glim/common/imu_integration.hpp>
 #include <glim/common/cloud_deskewing.hpp>
 #include <glim/common/cloud_covariance_estimation.hpp>
+#include <glim/common/odom_integration.hpp>
+#include <glim/common/full_linear_wheel_odometry_factor.hpp>
 
 #include <glim/odometry/callbacks.hpp>
 
@@ -32,6 +34,7 @@ using Callbacks = OdometryEstimationCallbacks;
 using gtsam::symbol_shorthand::B;  // IMU bias
 using gtsam::symbol_shorthand::V;  // IMU velocity   (v_world_imu)
 using gtsam::symbol_shorthand::X;  // IMU pose       (T_world_imu)
+using gtsam::symbol_shorthand::K;  // Wheel prior     
 
 OdometryEstimationCPUParams::OdometryEstimationCPUParams() : OdometryEstimationIMUParams() {
   // odometry config
@@ -74,6 +77,41 @@ OdometryEstimationCPU::OdometryEstimationCPU(const OdometryEstimationCPUParams& 
 
 OdometryEstimationCPU::~OdometryEstimationCPU() {}
 
+gtsam::NonlinearFactorGraph OdometryEstimationCPU::create_wheel_odometry_factor(
+    const int last, const int current, gtsam::Values& values)
+{
+    gtsam::NonlinearFactorGraph factors;
+
+    // Initial value is set by using the ideal-differential drive model.
+    gtsam::Vector6 initial_K;
+    double wheel_radius = params->wheel_radius;
+    double wheel_base = params->wheel_base;
+    initial_K << 0.5 * wheel_radius, 0.5 * wheel_radius, 0.0, 0.0, -wheel_radius/wheel_base, wheel_radius/wheel_base;
+    values.insert(K(last), initial_K);
+    auto model_prior_noise = gtsam::noiseModel::Isotropic::Precision(6, params->differential_drive_model_noise);
+    factors.addPrior(K(last), initial_K, model_prior_noise);
+
+    double right_wheels_delta_angle_for_straight_movement; // [rad]
+    double left_wheel_delta_angle_for_straight_movement; // [rad]
+    int curso = odom_integration->integrate_odom(frames[last]->stamp, frames[current]->stamp, 
+      left_wheel_delta_angle_for_straight_movement, right_wheels_delta_angle_for_straight_movement);
+
+    odom_integration->erase_odom_data(curso);
+
+    // The uncertainty of full linear model (In this sample code, a constant matrix is used.)
+    auto wheel_odom_noisemodel = gtsam::noiseModel::Isotropic::Precision(6, params->wheel_odometry_noise);
+      // Transformation between the robot frame and IMU frame
+    gtsam::Pose3 T_Robot_Imu(params->T_robot_imu.matrix());
+    // Create the full linear wheel odometry factors
+    factors.add(FullLinearWheelOdometyFactor(K(last),
+                                          X(last), X(current),
+                                          right_wheels_delta_angle_for_straight_movement, left_wheel_delta_angle_for_straight_movement,
+                                            T_Robot_Imu,
+                                            wheel_odom_noisemodel));
+
+    return factors;
+}
+
 gtsam::NonlinearFactorGraph OdometryEstimationCPU::create_factors(const int current, const boost::shared_ptr<gtsam::ImuFactor>& imu_factor, gtsam::Values& new_values) {
   const auto params = static_cast<const OdometryEstimationCPUParams*>(this->params.get());
   const int last = current - 1;
@@ -108,6 +146,15 @@ gtsam::NonlinearFactorGraph OdometryEstimationCPU::create_factors(const int curr
       vgicp_factor->set_num_threads(params->num_threads);
       matching_cost_factors.add(vgicp_factor);
     }
+  }
+
+  if (params->use_wheel && current > 0) {
+    auto wheel_odometry_factors = create_wheel_odometry_factor(last, current,  values);
+    values.insert(X(last), gtsam::Pose3(last_T_target_imu.matrix()));
+    matching_cost_factors.add(wheel_odometry_factors);
+
+    matching_cost_factors.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+      X(last), gtsam::Pose3(last_T_target_imu.matrix()), gtsam::noiseModel::Isotropic::Precision(6, 1e6));
   }
 
   gtsam::NonlinearFactorGraph graph;

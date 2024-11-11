@@ -55,6 +55,8 @@ private:
 
   void update_target(const int current, const Eigen::Isometry3d& T_target_imu);
 
+  gtsam::NonlinearFactorGraph create_wheel_odometry_factor(const int last, const int current, gtsam::Values& values);
+
 private:
   // Registration params
   std::mt19937 mt;                                                                   ///< RNG
