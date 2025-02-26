@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(glim VERSION 1.0.6 LANGUAGES CXX)
+project(glim VERSION 1.0.7 LANGUAGES CXX)
 
 add_compile_options(-std=c++17)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_LIST_DIR}/cmake")
@@ -99,7 +99,7 @@ target_link_libraries(glim
   Boost::boost
   Boost::serialization
   Eigen3::Eigen
-  GTSAM::GTSAM
+  gtsam
   gtsam_points::gtsam_points
   OpenMP::OpenMP_CXX
   spdlog::spdlog
@@ -236,7 +236,7 @@ if(DEFINED ENV{ROS_VERSION})
     install(DIRECTORY config DESTINATION share/glim)
     ament_export_include_directories(include ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS})
     ament_export_libraries(${glim_LIBRARIES} ${GTSAM_LIBRARIES} fmt spdlog::spdlog)
-    ament_export_interfaces(glim-targets HAS_LIBRARY_TARGET)
+    ament_export_targets(glim-targets HAS_LIBRARY_TARGET)
     ament_package(CONFIG_EXTRAS "cmake/glim-config.cmake.in")
   elseif($ENV{ROS_VERSION} EQUAL 1)
     # ROS1
